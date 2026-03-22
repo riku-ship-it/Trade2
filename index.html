@@ -648,7 +648,7 @@ async function startAIAnalysis(){
       endDate  :currentRangeCtx.endDate
     });
     removeLoading();
-    if(res.status==='ok'&&res.analysis) addMsg('ai',res.analysis);
+    if(res.status==='ok'&&res.report) addMsg('ai',res.report);
     else addMsg('ai','❌ 分析失敗：'+(res.message||'請稍後再試'));
   }catch(e){
     removeLoading();
