@@ -677,7 +677,7 @@ async function sendChat(){
       context:currentRangeCtx?{ startDate:currentRangeCtx.startDate, endDate:currentRangeCtx.endDate }:null
     });
     removeLoading();
-    if(res.status==='ok'&&res.analysis) addMsg('ai',res.analysis);
+    if(res.status==='ok'&&res.report) addMsg('ai',res.report);
     else addMsg('ai','❌ '+(res.message||'回覆失敗'));
   }catch(e){
     removeLoading();
