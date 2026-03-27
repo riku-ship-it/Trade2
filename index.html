@@ -537,6 +537,30 @@
       </div>
     </div>
     <div class="card">
+      <div class="card-title">費用分析</div>
+      <div class="analytics-summary">
+        <div class="analytics-stat">
+          <div class="val" id="msFees" style="color:var(--red)">—</div>
+          <div class="lbl">稅費合計</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">證交稅＋手續費</div>
+        </div>
+        <div class="analytics-stat">
+          <div class="val" id="msGross">—</div>
+          <div class="lbl">毛損益</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">扣費前損益</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">進階統計</div>
+      <div class="analytics-summary">
+        <div class="analytics-stat"><div class="val" id="msAvgPnl">—</div><div class="lbl">平均損益</div></div>
+        <div class="analytics-stat"><div class="val" id="msMaxWin" style="color:var(--green)">—</div><div class="lbl">最大獲利</div></div>
+        <div class="analytics-stat"><div class="val" id="msMaxLoss" style="color:var(--red)">—</div><div class="lbl">最大虧損</div></div>
+        <div class="analytics-stat"><div class="val" id="msProfitFactor">—</div><div class="lbl">盈虧比</div></div>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">每日損益</div>
       <div class="chart-wrap" style="height:200px">
         <canvas id="dailyChart"></canvas>
@@ -829,6 +853,12 @@ function calcPnL(dir,entry,exit,lots){
   const sell=dir==='空'?entry:exit, buy=dir==='空'?exit:entry;
   return Math.round(gross - sell*lots*unit*STT_RATE - (sell+buy)*lots*unit*COMM_RATE);
 }
+function calcTradeFee(t){
+  if(!t.entry||!t.exit||!t.lots) return 0;
+  const unit=1000;
+  const sell=t.dir==='空'?t.entry:t.exit, buy=t.dir==='空'?t.exit:t.entry;
+  return Math.round(sell*t.lots*unit*STT_RATE + (sell+buy)*t.lots*unit*COMM_RATE);
+}
 async function submitTrade(){
   const stock=document.getElementById('stockName').value.trim();
   const entry=parseFloat(document.getElementById('entryPrice').value);
@@ -898,6 +928,31 @@ function renderMonthlyChart(){
   totalEl.style.color=pnl>0?'var(--green)':pnl<0?'var(--red)':'inherit';
   document.getElementById('msWinRate').textContent=cnt>0?Math.round(wins/cnt*100)+'%':'—';
   document.getElementById('msCount').textContent=cnt+' 筆';
+
+  // Fee analysis
+  const totalFees=trades.reduce((s,t)=>s+calcTradeFee(t),0);
+  const gross=pnl+totalFees;
+  const feesEl=document.getElementById('msFees');
+  feesEl.textContent=cnt>0?'-NT$ '+fmtNum(totalFees):'—';
+  const grossEl=document.getElementById('msGross');
+  grossEl.textContent=cnt>0?'NT$ '+fmtNum(gross):'—';
+  grossEl.style.color=gross>0?'var(--green)':gross<0?'var(--red)':'inherit';
+
+  // Advanced stats
+  const winTrades=trades.filter(t=>t.pnl>0);
+  const lossTrades=trades.filter(t=>t.pnl<0);
+  const avgPnl=cnt>0?Math.round(pnl/cnt):null;
+  const maxWin=winTrades.length>0?Math.max(...winTrades.map(t=>t.pnl)):null;
+  const maxLoss=lossTrades.length>0?Math.min(...lossTrades.map(t=>t.pnl)):null;
+  const avgWin=winTrades.length>0?winTrades.reduce((s,t)=>s+t.pnl,0)/winTrades.length:0;
+  const avgLossAbs=lossTrades.length>0?Math.abs(lossTrades.reduce((s,t)=>s+t.pnl,0)/lossTrades.length):0;
+  const profitFactor=avgLossAbs>0?(avgWin/avgLossAbs).toFixed(2):(avgWin>0?'∞':'—');
+  const avgEl=document.getElementById('msAvgPnl');
+  avgEl.textContent=avgPnl!==null?'NT$ '+fmtNum(avgPnl):'—';
+  avgEl.style.color=avgPnl>0?'var(--green)':avgPnl<0?'var(--red)':'inherit';
+  document.getElementById('msMaxWin').textContent=maxWin!==null?'NT$ '+fmtNum(maxWin):'—';
+  document.getElementById('msMaxLoss').textContent=maxLoss!==null?'NT$ '+fmtNum(maxLoss):'—';
+  document.getElementById('msProfitFactor').textContent=cnt>0?profitFactor:'—';
 
   // Build day buckets
   const [yr,mo]=ym.split('-').map(Number);
