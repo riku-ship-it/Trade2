@@ -34,6 +34,7 @@
       color      : var(--text);
       min-height : 100dvh;
       padding-bottom: var(--nav-h);
+      overflow-x : hidden;
     }
 
     .card {
@@ -326,7 +327,7 @@
     .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
 
     /* Analytics page */
-    .form-input[type="date"], .form-input[type="month"] { color-scheme: dark; }
+    .form-input[type="date"], .form-input[type="month"] { color-scheme: dark; max-width: 100%; min-width: 0; }
 
     .seg-ctrl {
       display: flex; gap: 4px;
@@ -350,7 +351,7 @@
       background: var(--bg2); border: 1px solid var(--border);
       border-radius: 10px; padding: 10px 8px;
     }
-    .analytics-stat .val { font-size: 16px; font-weight: 700; }
+    .analytics-stat .val { font-size: 16px; font-weight: 700; white-space: pre-line; }
     .analytics-stat .lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
     .chart-wrap { position: relative; }
@@ -924,7 +925,7 @@ function renderMonthlyChart(){
   const wins=trades.filter(t=>t.pnl>0).length;
   const cnt=trades.length;
   const totalEl=document.getElementById('msTotal');
-  totalEl.textContent='NT$ '+fmtNum(pnl);
+  totalEl.textContent='NT$\n'+fmtNum(pnl);
   totalEl.style.color=pnl>0?'var(--green)':pnl<0?'var(--red)':'inherit';
   document.getElementById('msWinRate').textContent=cnt>0?Math.round(wins/cnt*100)+'%':'—';
   document.getElementById('msCount').textContent=cnt+' 筆';
@@ -933,9 +934,9 @@ function renderMonthlyChart(){
   const totalFees=trades.reduce((s,t)=>s+calcTradeFee(t),0);
   const gross=pnl+totalFees;
   const feesEl=document.getElementById('msFees');
-  feesEl.textContent=cnt>0?'-NT$ '+fmtNum(totalFees):'—';
+  feesEl.textContent=cnt>0?'-NT$\n'+fmtNum(totalFees):'—';
   const grossEl=document.getElementById('msGross');
-  grossEl.textContent=cnt>0?'NT$ '+fmtNum(gross):'—';
+  grossEl.textContent=cnt>0?'NT$\n'+fmtNum(gross):'—';
   grossEl.style.color=gross>0?'var(--green)':gross<0?'var(--red)':'inherit';
 
   // Advanced stats
@@ -948,10 +949,10 @@ function renderMonthlyChart(){
   const avgLossAbs=lossTrades.length>0?Math.abs(lossTrades.reduce((s,t)=>s+t.pnl,0)/lossTrades.length):0;
   const profitFactor=avgLossAbs>0?(avgWin/avgLossAbs).toFixed(2):(avgWin>0?'∞':'—');
   const avgEl=document.getElementById('msAvgPnl');
-  avgEl.textContent=avgPnl!==null?'NT$ '+fmtNum(avgPnl):'—';
+  avgEl.textContent=avgPnl!==null?'NT$\n'+fmtNum(avgPnl):'—';
   avgEl.style.color=avgPnl>0?'var(--green)':avgPnl<0?'var(--red)':'inherit';
-  document.getElementById('msMaxWin').textContent=maxWin!==null?'NT$ '+fmtNum(maxWin):'—';
-  document.getElementById('msMaxLoss').textContent=maxLoss!==null?'NT$ '+fmtNum(maxLoss):'—';
+  document.getElementById('msMaxWin').textContent=maxWin!==null?'NT$\n'+fmtNum(maxWin):'—';
+  document.getElementById('msMaxLoss').textContent=maxLoss!==null?'NT$\n'+fmtNum(maxLoss):'—';
   document.getElementById('msProfitFactor').textContent=cnt>0?profitFactor:'—';
 
   // Build day buckets
