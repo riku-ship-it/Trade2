@@ -330,9 +330,9 @@
     .form-input[type="date"], .form-input[type="month"] { color-scheme: dark; max-width: 100%; min-width: 0; }
 
     /* Date input wrapper with calendar icon */
-    .date-input-wrap { position: relative; border-radius: 10px; }
+    .date-input-wrap { position: relative; border-radius: 10px; width: 100%; overflow: hidden; }
     .date-input-wrap .form-input[type="date"],
-    .date-input-wrap .form-input[type="month"] { padding-left: 42px; padding-right: 14px; border-radius: 10px; }
+    .date-input-wrap .form-input[type="month"] { padding-left: 42px; padding-right: 14px; border-radius: 10px; width: 100%; min-width: 0; }
     .date-input-wrap .form-input[type="date"]::-webkit-calendar-picker-indicator,
     .date-input-wrap .form-input[type="month"]::-webkit-calendar-picker-indicator { opacity: 0; position: absolute; right: 0; width: 100%; height: 100%; cursor: pointer; }
     .date-cal-icon {
