@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>當沖交易日誌</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -324,6 +325,36 @@
     .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
     .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
 
+    /* Analytics page */
+    .form-input[type="date"], .form-input[type="month"] { color-scheme: dark; }
+
+    .seg-ctrl {
+      display: flex; gap: 4px;
+      background: var(--card); border-radius: 11px;
+      padding: 4px; margin-bottom: 12px;
+      border: 1px solid var(--border);
+    }
+    .seg-btn {
+      flex: 1; padding: 8px 4px; border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: inherit; color: var(--muted); background: transparent;
+      transition: all .15s;
+    }
+    .seg-btn.active { background: var(--primary); color: #fff; }
+
+    .analytics-summary {
+      display: flex; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;
+    }
+    .analytics-stat {
+      flex: 1; min-width: 80px; text-align: center;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 8px;
+    }
+    .analytics-stat .val { font-size: 16px; font-weight: 700; }
+    .analytics-stat .lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    .chart-wrap { position: relative; }
+
     @media (min-width: 600px) {
       .page { max-width: 480px; margin: 0 auto; }
       .topbar { max-width: 480px; margin: 0 auto; }
@@ -358,6 +389,7 @@
   </button>
   <h1>新增交易</h1>
 </div>
+<div class="topbar" id="analyticsTopbar" style="display:none"><h1>📊 分析報表</h1></div>
 
 <!-- 畫面一：儀表板 -->
 <div class="page active" id="dashPage">
@@ -443,7 +475,7 @@
   <div class="card" style="padding:14px 18px;margin-bottom:12px">
     <div class="form-group" style="margin-bottom:0">
       <label class="form-label">日期</label>
-      <input class="form-input" type="text" id="tradeDate" readonly />
+      <input class="form-input" type="date" id="tradeDate" />
     </div>
   </div>
   <div class="card">
@@ -481,6 +513,55 @@
   </button>
 </div>
 
+<!-- 畫面三：分析報表 -->
+<div class="page" id="analyticsPage">
+
+  <div class="seg-ctrl">
+    <button class="seg-btn active" id="tabMonthly"  onclick="switchAnalyticsTab('monthly')">月份分析</button>
+    <button class="seg-btn"        id="tabCompare"  onclick="switchAnalyticsTab('compare')">月份對比</button>
+  </div>
+
+  <!-- 月份分析 tab -->
+  <div id="analyticsMonthly">
+    <div class="card" style="padding:14px 18px;margin-bottom:12px">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">選擇月份</label>
+        <input class="form-input" type="month" id="analyticsMonth" oninput="renderMonthlyChart()" />
+      </div>
+    </div>
+    <div class="card">
+      <div class="analytics-summary" id="monthlySummary">
+        <div class="analytics-stat"><div class="val" id="msTotal">—</div><div class="lbl">月損益</div></div>
+        <div class="analytics-stat"><div class="val" id="msWinRate">—</div><div class="lbl">勝率</div></div>
+        <div class="analytics-stat"><div class="val" id="msCount">—</div><div class="lbl">交易筆數</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">每日損益</div>
+      <div class="chart-wrap" style="height:200px">
+        <canvas id="dailyChart"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">累積損益曲線</div>
+      <div class="chart-wrap" style="height:180px">
+        <canvas id="cumulChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 月份對比 tab -->
+  <div id="analyticsCompare" style="display:none">
+    <div class="card">
+      <div class="card-title">近 6 個月損益對比</div>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="compareChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div>
+
 <nav class="bottom-nav">
   <button class="nav-btn active" id="navDash" onclick="showDash()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -489,6 +570,10 @@
   <button class="nav-btn" id="navAdd" onclick="showAdd()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
     新增交易
+  </button>
+  <button class="nav-btn" id="navAnalytics" onclick="showAnalytics()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    分析
   </button>
 </nav>
 
@@ -507,7 +592,9 @@ let currentRangeCtx    = null;
 // ── INIT ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initDateInputs();
-  document.getElementById('tradeDate').value = todayStr().replace(/-/g,'/');
+  document.getElementById('tradeDate').value = todayStr();
+  const now=new Date();
+  document.getElementById('analyticsMonth').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   setDir('空');
   loadData();
 });
@@ -540,22 +627,17 @@ function showLoading(v){
 }
 
 // ── PAGE SWITCH ─────────────────────────────────────────────────
-function showDash(){
-  document.getElementById('dashPage').classList.add('active');
-  document.getElementById('addPage').classList.remove('active');
-  document.getElementById('dashTopbar').style.display='';
-  document.getElementById('addTopbar').style.display='none';
-  document.getElementById('navDash').classList.add('active');
-  document.getElementById('navAdd').classList.remove('active');
+function _setPage(pageId, topbarId, navId){
+  ['dashPage','addPage','analyticsPage'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['dashTopbar','addTopbar','analyticsTopbar'].forEach(id=>document.getElementById(id).style.display='none');
+  ['navDash','navAdd','navAnalytics'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById(pageId).classList.add('active');
+  document.getElementById(topbarId).style.display='';
+  document.getElementById(navId).classList.add('active');
 }
-function showAdd(){
-  document.getElementById('addPage').classList.add('active');
-  document.getElementById('dashPage').classList.remove('active');
-  document.getElementById('addTopbar').style.display='';
-  document.getElementById('dashTopbar').style.display='none';
-  document.getElementById('navAdd').classList.add('active');
-  document.getElementById('navDash').classList.remove('active');
-}
+function showDash(){ _setPage('dashPage','dashTopbar','navDash'); }
+function showAdd(){ _setPage('addPage','addTopbar','navAdd'); }
+function showAnalytics(){ _setPage('analyticsPage','analyticsTopbar','navAnalytics'); renderAnalytics(); }
 
 // ── DATA ────────────────────────────────────────────────────────
 async function loadData(){
@@ -757,18 +839,121 @@ async function submitTrade(){
   if(!exit ||exit <=0){ showToast('請輸入有效出場價'); return; }
   if(!lots ||lots <=0){ showToast('請輸入有效張數');   return; }
   const pnl=calcPnL(currentDir,entry,exit,lots);
-  const date=todayStr().replace(/-/g,'/');
+  const dateVal=document.getElementById('tradeDate').value;
+  if(!dateVal){ showToast('請選擇日期'); return; }
+  const date=dateVal.replace(/-/g,'/');
   showLoading(true);
   try{
     const res=await gasPost({action:'addTrade',date,stock,dir:currentDir,entry,exit,lots,pnl});
     if(res.status==='ok'){
       showToast('✅ 交易已寫入！');
       ['stockName','entryPrice','exitPrice','lotsInput'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('tradeDate').value=todayStr();
       setDir('空'); updatePreview();
       await loadData(); setTimeout(showDash,600);
     } else showToast('❌ 寫入失敗：'+(res.message||''));
   }catch(e){ showToast('❌ 連線錯誤'); console.error(e); }
   finally{ showLoading(false); }
+}
+
+// ── ANALYTICS ───────────────────────────────────────────────────
+let analyticsTab='monthly';
+let dailyChartInst=null, cumulChartInst=null, compareChartInst=null;
+
+const CHART_DEFAULTS={
+  color:'#a0a0a0',
+  plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:ctx=>'NT$ '+fmtNum(ctx.parsed.y) } } },
+  scales:{
+    x:{ ticks:{ color:'#a0a0a0', font:{size:10} }, grid:{ color:'#2e2e2e' } },
+    y:{ ticks:{ color:'#a0a0a0', font:{size:10}, callback:v=>'NT$'+fmtNum(v) }, grid:{ color:'#2e2e2e' } }
+  }
+};
+
+function switchAnalyticsTab(tab){
+  analyticsTab=tab;
+  document.getElementById('analyticsMonthly').style.display=tab==='monthly'?'':'none';
+  document.getElementById('analyticsCompare').style.display=tab==='compare'?'':'none';
+  document.getElementById('tabMonthly').classList.toggle('active',tab==='monthly');
+  document.getElementById('tabCompare').classList.toggle('active',tab==='compare');
+  renderAnalytics();
+}
+
+function renderAnalytics(){
+  if(analyticsTab==='monthly') renderMonthlyChart();
+  else renderCompareChart();
+}
+
+function renderMonthlyChart(){
+  const ym=document.getElementById('analyticsMonth').value; // YYYY-MM
+  if(!ym) return;
+  const ymSlash=ym.replace('-','/');
+  const trades=allTrades.filter(t=>t.date.startsWith(ymSlash));
+
+  // Summary stats
+  const pnl=trades.reduce((s,t)=>s+t.pnl,0);
+  const wins=trades.filter(t=>t.pnl>0).length;
+  const cnt=trades.length;
+  const totalEl=document.getElementById('msTotal');
+  totalEl.textContent='NT$ '+fmtNum(pnl);
+  totalEl.style.color=pnl>0?'var(--green)':pnl<0?'var(--red)':'inherit';
+  document.getElementById('msWinRate').textContent=cnt>0?Math.round(wins/cnt*100)+'%':'—';
+  document.getElementById('msCount').textContent=cnt+' 筆';
+
+  // Build day buckets
+  const [yr,mo]=ym.split('-').map(Number);
+  const daysInMonth=new Date(yr,mo,0).getDate();
+  const dayMap={};
+  trades.forEach(t=>{ const d=t.date.substring(8,10); dayMap[d]=(dayMap[d]||0)+t.pnl; });
+
+  const labels=[],data=[],colors=[];
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=String(d).padStart(2,'0');
+    labels.push(d+'日');
+    const v=dayMap[ds]||0;
+    data.push(v);
+    colors.push(v>=0?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)');
+  }
+
+  // Cumulative
+  const cumul=[]; let run=0;
+  data.forEach(v=>{ run+=v; cumul.push(run); });
+  const lastVal=cumul[cumul.length-1]||0;
+  const lineColor=lastVal>=0?'#22c55e':'#ef4444';
+
+  if(dailyChartInst) dailyChartInst.destroy();
+  dailyChartInst=new Chart(document.getElementById('dailyChart'),{
+    type:'bar',
+    data:{ labels, datasets:[{ data, backgroundColor:colors, borderRadius:3 }] },
+    options:{ responsive:true, maintainAspectRatio:false, ...CHART_DEFAULTS }
+  });
+
+  if(cumulChartInst) cumulChartInst.destroy();
+  cumulChartInst=new Chart(document.getElementById('cumulChart'),{
+    type:'line',
+    data:{ labels, datasets:[{ data:cumul, borderColor:lineColor, backgroundColor:lineColor+'28', fill:true, tension:0.35, pointRadius:2 }] },
+    options:{ responsive:true, maintainAspectRatio:false, ...CHART_DEFAULTS }
+  });
+}
+
+function renderCompareChart(){
+  const now=new Date();
+  const months=[], labels=[], data=[], colors=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const ym=d.getFullYear()+'/'+String(d.getMonth()+1).padStart(2,'0');
+    months.push(ym);
+    labels.push((d.getMonth()+1)+'月\n'+d.getFullYear());
+    const pnl=allTrades.filter(t=>t.date.startsWith(ym)).reduce((s,t)=>s+t.pnl,0);
+    data.push(pnl);
+    colors.push(pnl>=0?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)');
+  }
+
+  if(compareChartInst) compareChartInst.destroy();
+  compareChartInst=new Chart(document.getElementById('compareChart'),{
+    type:'bar',
+    data:{ labels, datasets:[{ data, backgroundColor:colors, borderRadius:6 }] },
+    options:{ responsive:true, maintainAspectRatio:false, ...CHART_DEFAULTS }
+  });
 }
 
 // ── GAS POST ────────────────────────────────────────────────────
