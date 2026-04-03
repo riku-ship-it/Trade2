@@ -341,6 +341,24 @@
       display: flex; align-items: center; z-index: 1;
     }
 
+    .topbar-action-btn {
+      margin-left: auto; background: none; border: none;
+      cursor: pointer; color: var(--primary); padding: 6px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px; transition: background .15s;
+    }
+    .topbar-action-btn:active { background: var(--primary-lt); }
+    .topbar-action-btn svg { width: 22px; height: 22px; }
+
+    .notes-textarea {
+      width: 100%; background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text); font-family: inherit;
+      font-size: 14px; padding: 12px 14px; resize: vertical; min-height: 80px;
+      outline: none; transition: border-color .15s; line-height: 1.5;
+    }
+    .notes-textarea:focus { border-color: var(--primary); }
+    .notes-textarea::placeholder { color: var(--muted); }
+
     .seg-ctrl {
       display: flex; gap: 4px;
       background: var(--card); border-radius: 11px;
@@ -401,6 +419,9 @@
     返回
   </button>
   <h1>新增交易</h1>
+  <button class="topbar-action-btn" onclick="openCSVImport()" title="匯入 CSV">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><polyline points="8 11 12 15 16 11"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+  </button>
 </div>
 <div class="topbar" id="analyticsTopbar" style="display:none"><h1>📊 分析報表</h1></div>
 
@@ -526,6 +547,13 @@
     <div class="val zero" id="previewPnl">NT$ 0</div>
     <div class="note">※ 證交稅 0.15% + 手續費折扣後，僅供參考</div>
   </div>
+  <div class="card">
+    <div class="form-group" style="margin-bottom:0">
+      <label class="form-label">交易明細</label>
+      <textarea class="notes-textarea" id="tradeNotes"
+        placeholder="記錄進場理由、策略、盤感心得…"></textarea>
+    </div>
+  </div>
   <button class="btn btn-primary btn-full" onclick="submitTrade()" style="font-size:16px;padding:14px">
     寫入交易紀錄
   </button>
@@ -617,10 +645,6 @@
   <button class="nav-btn" id="navAdd" onclick="showAdd()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
     新增交易
-  </button>
-  <button class="nav-btn" onclick="openCSVImport()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><polyline points="8 11 12 15 16 11"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    匯入 CSV
   </button>
   <button class="nav-btn" id="navAnalytics" onclick="showAnalytics()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -899,18 +923,31 @@ async function submitTrade(){
   const dateVal=document.getElementById('tradeDate').value;
   if(!dateVal){ showToast('請選擇日期'); return; }
   const date=dateVal.replace(/-/g,'/');
+  const notes=document.getElementById('tradeNotes').value.trim();
   showLoading(true);
   try{
-    const res=await gasPost({action:'addTrade',date,stock,dir:currentDir,entry,exit,lots,pnl});
+    const res=await gasPost({action:'addTrade',date,stock,dir:currentDir,entry,exit,lots,pnl,notes});
     if(res.status==='ok'){
       showToast('✅ 交易已寫入！');
-      ['stockName','entryPrice','exitPrice','lotsInput'].forEach(id=>document.getElementById(id).value='');
+      ['stockName','entryPrice','exitPrice','lotsInput','tradeNotes'].forEach(id=>document.getElementById(id).value='');
       document.getElementById('tradeDate').value=todayStr();
       setDir('空'); updatePreview();
       await loadData(); setTimeout(showDash,600);
     } else showToast('❌ 寫入失敗：'+(res.message||''));
   }catch(e){ showToast('❌ 連線錯誤'); console.error(e); }
   finally{ showLoading(false); }
+}
+
+// ── UPDATE NOTE ─────────────────────────────────────────────────
+async function updateNote(writtenAt, notes){
+  try{
+    const res=await gasPost({action:'updateNote', writtenAt, notes});
+    if(res.status==='ok'){
+      const t=allTrades.find(t=>t.writtenAt===writtenAt);
+      if(t) t.notes=notes;
+      showToast('✅ 明細已更新');
+    } else showToast('❌ 更新失敗：'+(res.message||''));
+  }catch(e){ showToast('❌ 連線錯誤'); console.error(e); }
 }
 
 // ===== CSV 匯入相關函式 =====
