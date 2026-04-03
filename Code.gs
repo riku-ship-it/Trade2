@@ -22,6 +22,9 @@ function doPost(e) {
       case 'addTrade':
         result = addTrade(payload);
         break;
+      case 'updateNote':
+        result = updateNote(payload);
+        break;
       case 'analyzeAI':
         result = analyzeAI(payload);
         break;
@@ -67,7 +70,7 @@ function getData() {
     return { status: 'ok', trades: [] };
   }
 
-  const rows   = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+  const rows   = sheet.getRange(2, 1, lastRow - 1, 9).getValues();
   const trades = rows
     .filter(row => row[0] !== '' && row[0] !== null)
     .map(row => {
@@ -95,7 +98,8 @@ function getData() {
         exit     : parseFloat(row[4]) || 0,
         lots     : parseInt(row[5])   || 0,
         pnl      : parseInt(row[6])   || 0,
-        writtenAt: writtenAt
+        writtenAt: writtenAt,
+        notes    : row[8] ? String(row[8]) : ''
       };
     });
 
@@ -144,10 +148,49 @@ function addTrade(payload) {
     parseFloat(payload.exit),
     parseInt(payload.lots),
     parseInt(payload.pnl),
-    writtenAt
+    writtenAt,
+    payload.notes || ''
   ]);
 
   return { status: 'ok', message: '交易已成功寫入' };
+}
+
+// ======================================================================
+// action: updateNote
+// 依 writtenAt 找到對應交易列，更新 I 欄（交易明細）
+// 預期 payload：{ "action": "updateNote", "writtenAt": "...", "notes": "..." }
+// ======================================================================
+function updateNote(payload) {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('交易紀錄');
+
+  if (!sheet) {
+    return { status: 'error', message: '找不到「交易紀錄」工作表' };
+  }
+  if (!payload.writtenAt) {
+    return { status: 'error', message: '缺少 writtenAt 欄位' };
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    return { status: 'error', message: '工作表無資料' };
+  }
+
+  const hCol = sheet.getRange(2, 8, lastRow - 1, 1).getValues();
+  for (let i = 0; i < hCol.length; i++) {
+    let cellVal = hCol[i][0];
+    if (cellVal instanceof Date) {
+      cellVal = Utilities.formatDate(cellVal, 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+    } else {
+      cellVal = String(cellVal);
+    }
+    if (cellVal === payload.writtenAt) {
+      sheet.getRange(i + 2, 9).setValue(payload.notes || '');
+      return { status: 'ok', message: '明細已更新' };
+    }
+  }
+
+  return { status: 'error', message: '找不到對應的交易紀錄' };
 }
 
 // ======================================================================
