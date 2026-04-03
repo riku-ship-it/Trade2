@@ -618,6 +618,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
     新增交易
   </button>
+  <button class="nav-btn" onclick="openCSVImport()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><polyline points="8 11 12 15 16 11"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    匯入 CSV
+  </button>
   <button class="nav-btn" id="navAnalytics" onclick="showAnalytics()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
     分析
@@ -909,6 +913,178 @@ async function submitTrade(){
   finally{ showLoading(false); }
 }
 
+// ===== CSV 匯入相關函式 =====
+
+let csvParsedTrades = [];   // 暫存解析後、待確認的交易資料
+
+function openCSVImport() {
+  document.getElementById('csvImportModal').style.display = 'block';
+}
+
+function closeCSVImport() {
+  document.getElementById('csvImportModal').style.display = 'none';
+  resetCSVImport();
+}
+
+function resetCSVImport() {
+  document.getElementById('csvStep1').style.display = 'block';
+  document.getElementById('csvStep2').style.display = 'none';
+  document.getElementById('csvResult').style.display = 'none';
+  document.getElementById('csvFileInput').value = '';
+  csvParsedTrades = [];
+}
+
+function handleCSVFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const text  = e.target.result;
+      const lines = text.split('\n').filter(l => l.trim() !== '');
+
+      // 第一列是標題列，找各欄位的 index
+      const headers = lines[0].split(',').map(h => h.trim());
+      const idx = {
+        date     : headers.indexOf('日期'),
+        stockName: headers.indexOf('股名'),
+        stockCode: headers.indexOf('股票'),
+        shares   : headers.indexOf('成交股數'),
+        price    : headers.indexOf('單價'),
+        type     : headers.indexOf('類別'),
+        amount   : headers.indexOf('價金'),
+        fee      : headers.indexOf('手續費'),
+        tax      : headers.indexOf('交易稅'),
+        pnl      : headers.indexOf('損益')
+      };
+
+      // 解析資料列（從第二列開始）
+      const rawRows = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',');
+        const stockName = (cols[idx.stockName] || '').trim();
+
+        // 略過空列和總計列
+        if (!stockName || stockName.includes('總計')) continue;
+
+        rawRows.push({
+          rowIndex : i - 1,
+          date     : (cols[idx.date]      || '').trim(),
+          stockName: stockName,
+          stockCode: (cols[idx.stockCode] || '').trim(),
+          shares   : parseInt(cols[idx.shares])  || 0,
+          price    : parseFloat(cols[idx.price]) || 0,
+          type     : (cols[idx.type]      || '').trim(),
+          amount   : parseFloat(cols[idx.amount]) || 0,
+          fee      : parseFloat(cols[idx.fee])    || 0,
+          tax      : parseFloat(cols[idx.tax])    || 0,
+          pnl      : parseFloat(cols[idx.pnl])    || 0
+        });
+      }
+
+      // 在前端先做預覽用的彙整計算（不寫入，只預覽）
+      csvParsedTrades = rawRows;
+      showCSVPreview(rawRows);
+
+    } catch (err) {
+      alert('CSV 解析失敗：' + err.message);
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function showCSVPreview(rows) {
+  // 依「日期 + 股名」分組（前端預覽用）
+  const groups = {};
+  for (const r of rows) {
+    const key = r.date + '_' + r.stockName;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  }
+
+  const tbody = document.getElementById('csvPreviewBody');
+  tbody.innerHTML = '';
+  let tradeCount = 0;
+
+  for (const key in groups) {
+    const group = groups[key];
+
+    // 找最早那筆判斷方向
+    const firstRow    = group.reduce((min, r) => r.rowIndex < min.rowIndex ? r : min, group[0]);
+    const isSellFirst = firstRow.type === '現股賣沖';
+    const direction   = isSellFirst ? '空' : '多';
+
+    // 加權均價
+    function wavg(rows) {
+      const totalShares = rows.reduce((s, r) => s + r.shares, 0);
+      if (totalShares === 0) return 0;
+      return Math.round(rows.reduce((s, r) => s + r.shares * r.price, 0) / totalShares * 100) / 100;
+    }
+
+    const sellRows   = group.filter(r => r.type === '現股賣沖');
+    const buyRows    = group.filter(r => r.type === '現股買沖');
+    const entryPrice = isSellFirst ? wavg(sellRows) : wavg(buyRows);
+    const exitPrice  = isSellFirst ? wavg(buyRows)  : wavg(sellRows);
+
+    const entryRows = isSellFirst ? sellRows : buyRows;
+    const lots      = Math.round(entryRows.reduce((s, r) => s + r.shares, 0) / 1000);
+
+    const totalPnl = group.reduce((s, r) => s + (isNaN(r.pnl) ? 0 : r.pnl), 0);
+
+    // 日期轉換
+    const parts       = group[0].date.split('/');
+    const dateStr     = (parseInt(parts[0]) + 1911) + '/' + parts[1] + '/' + parts[2];
+    const pnlColor    = totalPnl >= 0 ? '#4caf50' : '#f44336';
+    const dirColor    = direction === '多' ? '#4caf50' : '#f44336';
+
+    tbody.innerHTML += `
+      <tr style="border-bottom:1px solid #333;">
+        <td style="padding:8px;">${dateStr}</td>
+        <td style="padding:8px;">${group[0].stockName}</td>
+        <td style="padding:8px; text-align:center; color:${dirColor};">${direction}</td>
+        <td style="padding:8px; text-align:right;">${entryPrice}</td>
+        <td style="padding:8px; text-align:right;">${exitPrice}</td>
+        <td style="padding:8px; text-align:right;">${lots}</td>
+        <td style="padding:8px; text-align:right; color:${pnlColor};">${Math.round(totalPnl).toLocaleString()}</td>
+      </tr>`;
+    tradeCount++;
+  }
+
+  document.getElementById('csvSummary').textContent =
+    `共解析出 ${tradeCount} 筆交易，請確認無誤後送出`;
+  document.getElementById('csvStep1').style.display = 'none';
+  document.getElementById('csvStep2').style.display = 'block';
+}
+
+async function submitCSVImport() {
+  const resultDiv = document.getElementById('csvResult');
+  resultDiv.style.display = 'block';
+  resultDiv.style.background = '#333';
+  resultDiv.textContent = '匯入中，請稍候...';
+
+  try {
+    const res  = await fetch(GAS_URL, {
+      method : 'POST',
+      body   : JSON.stringify({ action: 'importCSV', rows: csvParsedTrades })
+    });
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      resultDiv.style.background = '#1b5e20';
+      resultDiv.textContent =
+        `✅ 匯入成功！寫入 ${data.tradesWritten} 筆交易，略過 ${data.skipped} 筆無效列`;
+      setTimeout(() => { closeCSVImport(); loadData && loadData(); }, 2000);
+    } else {
+      resultDiv.style.background = '#b71c1c';
+      resultDiv.textContent = '❌ 匯入失敗：' + data.message;
+    }
+  } catch (err) {
+    resultDiv.style.background = '#b71c1c';
+    resultDiv.textContent = '❌ 網路錯誤：' + err.message;
+  }
+}
+
 // ── ANALYTICS ───────────────────────────────────────────────────
 let analyticsTab='monthly';
 let dailyChartInst=null, cumulChartInst=null, compareChartInst=null;
@@ -1046,5 +1222,67 @@ document.getElementById('goalModal').addEventListener('click',function(e){
   if(e.target===this) closeGoalModal();
 });
 </script>
+
+<!-- ===== CSV 匯入 Modal ===== -->
+<div id="csvImportModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+     background:rgba(0,0,0,0.7); z-index:9999; overflow-y:auto;">
+  <div style="background:#1e1e1e; margin:40px auto; max-width:600px; border-radius:12px; padding:24px;">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <h2 style="color:#fff; margin:0;">📂 匯入券商 CSV</h2>
+      <button onclick="closeCSVImport()"
+              style="background:none; border:none; color:#aaa; font-size:24px; cursor:pointer;">✕</button>
+    </div>
+
+    <!-- 步驟一：上傳檔案 -->
+    <div id="csvStep1">
+      <p style="color:#aaa;">請選擇券商對帳單 CSV 檔案（支援元大、富邦等格式）</p>
+      <input type="file" id="csvFileInput" accept=".csv"
+             style="display:none;" onchange="handleCSVFile(event)">
+      <button onclick="document.getElementById('csvFileInput').click()"
+              style="width:100%; padding:40px; border:2px dashed #555; border-radius:8px;
+                     background:none; color:#aaa; font-size:16px; cursor:pointer;">
+        點擊選擇 CSV 檔案
+      </button>
+    </div>
+
+    <!-- 步驟二：預覽（預設隱藏） -->
+    <div id="csvStep2" style="display:none;">
+      <div id="csvSummary" style="color:#aaa; margin-bottom:12px;"></div>
+      <div style="max-height:300px; overflow-y:auto;">
+        <table id="csvPreviewTable"
+               style="width:100%; border-collapse:collapse; font-size:13px; color:#ddd;">
+          <thead>
+            <tr style="background:#2a2a2a; position:sticky; top:0;">
+              <th style="padding:8px; text-align:left;">日期</th>
+              <th style="padding:8px; text-align:left;">股票</th>
+              <th style="padding:8px; text-align:center;">方向</th>
+              <th style="padding:8px; text-align:right;">進場價</th>
+              <th style="padding:8px; text-align:right;">出場價</th>
+              <th style="padding:8px; text-align:right;">張數</th>
+              <th style="padding:8px; text-align:right;">損益</th>
+            </tr>
+          </thead>
+          <tbody id="csvPreviewBody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; gap:12px; margin-top:16px;">
+        <button onclick="resetCSVImport()"
+                style="flex:1; padding:12px; background:#333; border:none;
+                       border-radius:8px; color:#fff; cursor:pointer;">重新選擇</button>
+        <button onclick="submitCSVImport()"
+                style="flex:2; padding:12px; background:#4f7cff; border:none;
+                       border-radius:8px; color:#fff; font-size:16px; cursor:pointer;">
+          ✅ 確認匯入
+        </button>
+      </div>
+    </div>
+
+    <!-- 結果訊息 -->
+    <div id="csvResult" style="display:none; margin-top:16px; padding:16px;
+         border-radius:8px; text-align:center; color:#fff;"></div>
+  </div>
+</div>
+
 </body>
 </html>
