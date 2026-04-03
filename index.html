@@ -386,6 +386,36 @@
 
     .chart-wrap { position: relative; }
 
+    /* Trade detail list */
+    .trade-detail-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 0; border-bottom: 1px solid var(--border);
+    }
+    .trade-detail-item:last-child { border-bottom: none; }
+    .trade-detail-date { font-size: 12px; color: var(--muted); min-width: 42px; }
+    .trade-detail-info { flex: 1; min-width: 0; }
+    .trade-detail-stock { font-size: 14px; font-weight: 700; }
+    .trade-detail-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .dir-badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      padding: 1px 6px; border-radius: 4px; margin-right: 4px;
+    }
+    .dir-badge.long  { background: var(--green-lt); color: var(--green); }
+    .dir-badge.short { background: var(--red-lt);   color: var(--red);   }
+    .trade-detail-pnl { font-size: 14px; font-weight: 700; min-width: 68px; text-align: right; }
+    .trade-detail-pnl.pos { color: var(--green); }
+    .trade-detail-pnl.neg { color: var(--red); }
+    .trade-detail-pnl.zero { color: var(--muted); }
+    .trade-edit-btn {
+      background: none; border: none; cursor: pointer; color: var(--primary);
+      padding: 6px; border-radius: 7px; display: flex; align-items: center;
+      transition: background .15s; flex-shrink: 0;
+    }
+    .trade-edit-btn:active { background: var(--primary-lt); }
+
+    /* Edit trade modal */
+    .modal-scroll { max-height: 80dvh; overflow-y: auto; }
+
     @media (min-width: 600px) {
       .page { max-width: 480px; margin: 0 auto; }
       .topbar { max-width: 480px; margin: 0 auto; }
@@ -623,6 +653,10 @@
         <canvas id="cumulChart"></canvas>
       </div>
     </div>
+    <div class="card" id="tradeDetailCard" style="display:none">
+      <div class="card-title">交易明細</div>
+      <div id="tradeDetailList"></div>
+    </div>
   </div>
 
   <!-- 月份對比 tab -->
@@ -660,6 +694,7 @@ const COMM_RATE = 0.0004;
 
 // ── STATE ───────────────────────────────────────────────────────
 let allTrades          = [];
+let editDir            = '空';
 let currentDir         = '空';
 let aiPanelOpen        = true;
 let currentRangeCtx    = null;
@@ -1224,6 +1259,8 @@ function renderMonthlyChart(){
     data:{ labels, datasets:[{ data:cumul, borderColor:lineColor, backgroundColor:lineColor+'28', fill:true, tension:0.35, pointRadius:2 }] },
     options:{ responsive:true, maintainAspectRatio:false, ...CHART_DEFAULTS }
   });
+
+  renderTradeDetails(trades);
 }
 
 function renderCompareChart(){
@@ -1247,6 +1284,100 @@ function renderCompareChart(){
   });
 }
 
+// ── TRADE DETAIL LIST ────────────────────────────────────────────
+function renderTradeDetails(trades){
+  const card=document.getElementById('tradeDetailCard');
+  const list=document.getElementById('tradeDetailList');
+  if(!trades||trades.length===0){ card.style.display='none'; return; }
+  card.style.display='';
+  const sorted=[...trades].sort((a,b)=>a.date.localeCompare(b.date));
+  list.innerHTML=sorted.map(t=>{
+    const mmdd=t.date.substring(5).replace('/','/');
+    const dirCls=t.dir==='多'?'long':'short';
+    const pnlCls=t.pnl>0?'pos':t.pnl<0?'neg':'zero';
+    const pnlStr=(t.pnl>=0?'+':'')+fmtNum(t.pnl);
+    const metaParts=[t.entry+'→'+t.exit, t.lots+'張'];
+    if(t.notes) metaParts.push(t.notes);
+    return `<div class="trade-detail-item">
+      <div class="trade-detail-date">${mmdd}</div>
+      <div class="trade-detail-info">
+        <div class="trade-detail-stock">
+          <span class="dir-badge ${dirCls}">${t.dir}</span>${t.stock}
+        </div>
+        <div class="trade-detail-meta">${metaParts.join(' · ')}</div>
+      </div>
+      <div class="trade-detail-pnl ${pnlCls}">NT$<br>${pnlStr}</div>
+      <button class="trade-edit-btn" onclick="openEditTrade('${t.writtenAt}')" title="編輯">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function openEditTrade(writtenAt){
+  const t=allTrades.find(t=>t.writtenAt===writtenAt);
+  if(!t) return;
+  document.getElementById('editWrittenAt').value=writtenAt;
+  document.getElementById('editTradeDate').value=t.date.replace(/\//g,'-');
+  document.getElementById('editStockName').value=t.stock;
+  document.getElementById('editEntryPrice').value=t.entry;
+  document.getElementById('editExitPrice').value=t.exit;
+  document.getElementById('editLotsInput').value=t.lots;
+  document.getElementById('editTradeNotes').value=t.notes||'';
+  setEditDir(t.dir);
+  document.getElementById('editTradeModal').classList.add('show');
+}
+
+function closeEditTrade(){
+  document.getElementById('editTradeModal').classList.remove('show');
+}
+
+function setEditDir(dir){
+  editDir=dir;
+  document.getElementById('editBtnLong').className='dir-btn'+(dir==='多'?' active-long':'');
+  document.getElementById('editBtnShort').className='dir-btn'+(dir==='空'?' active-short':'');
+  updateEditPreview();
+}
+
+function updateEditPreview(){
+  const entry=parseFloat(document.getElementById('editEntryPrice').value)||0;
+  const exit =parseFloat(document.getElementById('editExitPrice').value) ||0;
+  const lots =parseInt(document.getElementById('editLotsInput').value)   ||0;
+  const pnl  =calcPnL(editDir,entry,exit,lots);
+  const el   =document.getElementById('editPreviewPnl');
+  el.textContent='NT$ '+fmtNum(pnl);
+  el.className='val '+(pnl>0?'pos':pnl<0?'neg':'zero');
+}
+
+async function saveEditTrade(){
+  const writtenAt=document.getElementById('editWrittenAt').value;
+  const stock=document.getElementById('editStockName').value.trim();
+  const entry=parseFloat(document.getElementById('editEntryPrice').value);
+  const exit =parseFloat(document.getElementById('editExitPrice').value);
+  const lots =parseInt(document.getElementById('editLotsInput').value);
+  const dateVal=document.getElementById('editTradeDate').value;
+  const notes=document.getElementById('editTradeNotes').value.trim();
+  if(!stock)        { showToast('請輸入股票名稱'); return; }
+  if(!entry||entry<=0){ showToast('請輸入有效進場價'); return; }
+  if(!exit ||exit <=0){ showToast('請輸入有效出場價'); return; }
+  if(!lots ||lots <=0){ showToast('請輸入有效張數');   return; }
+  if(!dateVal)      { showToast('請選擇日期'); return; }
+  const date=dateVal.replace(/-/g,'/');
+  const pnl=calcPnL(editDir,entry,exit,lots);
+  showLoading(true);
+  try{
+    const res=await gasPost({action:'updateTrade',writtenAt,date,stock,dir:editDir,entry,exit,lots,pnl,notes});
+    if(res.status==='ok'){
+      const t=allTrades.find(t=>t.writtenAt===writtenAt);
+      if(t){ t.date=date; t.stock=stock; t.dir=editDir; t.entry=entry; t.exit=exit; t.lots=lots; t.pnl=pnl; t.notes=notes; }
+      closeEditTrade();
+      showToast('✅ 交易已更新');
+      renderAnalytics();
+    } else showToast('❌ 更新失敗：'+(res.message||''));
+  }catch(e){ showToast('❌ 連線錯誤'); console.error(e); }
+  finally{ showLoading(false); }
+}
+
 // ── GAS POST ────────────────────────────────────────────────────
 async function gasPost(payload){
   const res=await fetch(GAS_URL,{
@@ -1258,7 +1389,62 @@ async function gasPost(payload){
 document.getElementById('goalModal').addEventListener('click',function(e){
   if(e.target===this) closeGoalModal();
 });
+document.getElementById('editTradeModal').addEventListener('click',function(e){
+  if(e.target===this) closeEditTrade();
+});
 </script>
+
+<!-- ===== 編輯交易 Modal ===== -->
+<div class="modal-backdrop" id="editTradeModal">
+  <div class="modal-box modal-scroll">
+    <div class="modal-title">編輯交易</div>
+    <input type="hidden" id="editWrittenAt" />
+    <div class="form-group">
+      <label class="form-label">日期</label>
+      <div class="date-input-wrap">
+        <span class="date-cal-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </span>
+        <input class="form-input" type="date" id="editTradeDate" oninput="updateEditPreview()" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">股票名稱</label>
+      <input class="form-input" type="text" id="editStockName" placeholder="例如 友達" autocomplete="off" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">方向</label>
+      <div class="dir-toggle">
+        <button class="dir-btn" id="editBtnLong"  onclick="setEditDir('多')">多單 ▲</button>
+        <button class="dir-btn" id="editBtnShort" onclick="setEditDir('空')">空單 ▼</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">進場價</label>
+      <input class="form-input" type="number" id="editEntryPrice" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateEditPreview()" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">出場價</label>
+      <input class="form-input" type="number" id="editExitPrice" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateEditPreview()" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">張數</label>
+      <input class="form-input" type="number" id="editLotsInput" placeholder="1" min="1" step="1" inputmode="numeric" oninput="updateEditPreview()" />
+    </div>
+    <div class="pnl-preview" style="margin-bottom:12px">
+      <div class="lbl">預估損益（含費用）</div>
+      <div class="val zero" id="editPreviewPnl">NT$ 0</div>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label class="form-label">交易明細</label>
+      <textarea class="notes-textarea" id="editTradeNotes" placeholder="記錄進場理由、策略、盤感心得…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" style="flex:1" onclick="closeEditTrade()">取消</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveEditTrade()">儲存</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== CSV 匯入 Modal ===== -->
 <div id="csvImportModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;

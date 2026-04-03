@@ -25,6 +25,9 @@ function doPost(e) {
       case 'updateNote':
         result = updateNote(payload);
         break;
+      case 'updateTrade':
+        result = updateTrade(payload);
+        break;
       case 'analyzeAI':
         result = analyzeAI(payload);
         break;
@@ -187,6 +190,58 @@ function updateNote(payload) {
     if (cellVal === payload.writtenAt) {
       sheet.getRange(i + 2, 9).setValue(payload.notes || '');
       return { status: 'ok', message: '明細已更新' };
+    }
+  }
+
+  return { status: 'error', message: '找不到對應的交易紀錄' };
+}
+
+// ======================================================================
+// action: updateTrade
+// 依 writtenAt 找到對應交易列，更新所有欄位
+// ======================================================================
+function updateTrade(payload) {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('交易紀錄');
+
+  if (!sheet) {
+    return { status: 'error', message: '找不到「交易紀錄」工作表' };
+  }
+  if (!payload.writtenAt) {
+    return { status: 'error', message: '缺少 writtenAt 欄位' };
+  }
+
+  const required = ['date', 'stock', 'dir', 'entry', 'exit', 'lots', 'pnl'];
+  for (const field of required) {
+    if (payload[field] === undefined || payload[field] === null || payload[field] === '') {
+      return { status: 'error', message: '缺少欄位：' + field };
+    }
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    return { status: 'error', message: '工作表無資料' };
+  }
+
+  const hCol = sheet.getRange(2, 8, lastRow - 1, 1).getValues();
+  for (let i = 0; i < hCol.length; i++) {
+    let cellVal = hCol[i][0];
+    if (cellVal instanceof Date) {
+      cellVal = Utilities.formatDate(cellVal, 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+    } else {
+      cellVal = String(cellVal);
+    }
+    if (cellVal === payload.writtenAt) {
+      const row = i + 2;
+      sheet.getRange(row, 1).setValue(payload.date);
+      sheet.getRange(row, 2).setValue(payload.stock);
+      sheet.getRange(row, 3).setValue(payload.dir);
+      sheet.getRange(row, 4).setValue(parseFloat(payload.entry));
+      sheet.getRange(row, 5).setValue(parseFloat(payload.exit));
+      sheet.getRange(row, 6).setValue(parseInt(payload.lots));
+      sheet.getRange(row, 7).setValue(parseInt(payload.pnl));
+      sheet.getRange(row, 9).setValue(payload.notes || '');
+      return { status: 'ok', message: '交易已更新' };
     }
   }
 
