@@ -1452,7 +1452,9 @@ document.getElementById('editTradeModal').addEventListener('click',function(e){
 <!-- ===== 編輯交易 Modal ===== -->
 <div class="modal-backdrop" id="editTradeModal">
   <div class="modal-box modal-scroll">
-    <div class="modal-title">編輯交易</div>
+    <div class="modal-title" style="position:relative;">編輯交易
+      <button onclick="closeEditTrade()" style="position:absolute;top:0;right:0;background:none;border:none;color:#aaa;font-size:1.4rem;line-height:1;cursor:pointer;padding:0 2px;" aria-label="關閉">&times;</button>
+    </div>
     <input type="hidden" id="editWrittenAt" />
     <div class="form-group">
       <label class="form-label">日期</label>
