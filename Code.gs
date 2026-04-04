@@ -31,6 +31,12 @@ function doPost(e) {
       case 'analyzeAI':
         result = analyzeAI(payload);
         break;
+      case 'getDailyNotes':
+        result = getDailyNotes();
+        break;
+      case 'saveDailyNote':
+        result = saveDailyNote(payload);
+        break;
       default:
         result = { status: 'error', message: '未知的 action：' + action };
     }
@@ -305,4 +311,89 @@ function saveReport(dateRange, reportContent) {
 
   const now = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
   sheet.appendRow([dateRange, reportContent, now]);
+}
+
+// ======================================================================
+// action: getDailyNotes
+// 讀取「每日心得」工作表，回傳所有心得為 JSON 陣列
+// ======================================================================
+function getDailyNotes() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet   = ss.getSheetByName('每日心得');
+
+  if (!sheet) {
+    sheet = ss.insertSheet('每日心得');
+    sheet.appendRow(['日期', '心得', '更新時間']);
+    return { status: 'ok', notes: [] };
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    return { status: 'ok', notes: [] };
+  }
+
+  const rows  = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  const notes = rows
+    .filter(row => row[0] !== '' && row[0] !== null)
+    .map(row => {
+      let dateStr = '';
+      if (row[0] instanceof Date) {
+        dateStr = Utilities.formatDate(row[0], 'Asia/Taipei', 'yyyy/MM/dd');
+      } else {
+        dateStr = String(row[0]);
+      }
+      let updatedAt = '';
+      if (row[2] instanceof Date) {
+        updatedAt = Utilities.formatDate(row[2], 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+      } else if (row[2]) {
+        updatedAt = String(row[2]);
+      }
+      return { date: dateStr, note: String(row[1] || ''), updatedAt };
+    });
+
+  return { status: 'ok', notes };
+}
+
+// ======================================================================
+// action: saveDailyNote
+// 新增或更新「每日心得」工作表中某日的心得
+// 預期 payload：{ "action": "saveDailyNote", "date": "2026/04/04", "note": "..." }
+// ======================================================================
+function saveDailyNote(payload) {
+  if (!payload.date) {
+    return { status: 'error', message: '缺少 date 欄位' };
+  }
+
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet   = ss.getSheetByName('每日心得');
+  if (!sheet) {
+    sheet = ss.insertSheet('每日心得');
+    sheet.appendRow(['日期', '心得', '更新時間']);
+  }
+
+  const now       = new Date();
+  const updatedAt = Utilities.formatDate(now, 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+  const noteText  = payload.note || '';
+  const dateKey   = payload.date;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    const aCol = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < aCol.length; i++) {
+      let cellVal = aCol[i][0];
+      if (cellVal instanceof Date) {
+        cellVal = Utilities.formatDate(cellVal, 'Asia/Taipei', 'yyyy/MM/dd');
+      } else {
+        cellVal = String(cellVal);
+      }
+      if (cellVal === dateKey) {
+        sheet.getRange(i + 2, 2).setValue(noteText);
+        sheet.getRange(i + 2, 3).setValue(updatedAt);
+        return { status: 'ok', message: '心得已更新' };
+      }
+    }
+  }
+
+  sheet.appendRow([dateKey, noteText, updatedAt]);
+  return { status: 'ok', message: '心得已儲存' };
 }

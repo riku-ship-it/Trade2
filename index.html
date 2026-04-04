@@ -431,6 +431,19 @@
     /* Edit trade modal */
     .modal-scroll { max-height: 80dvh; overflow-y: auto; }
 
+    /* Daily note items */
+    .daily-note-item {
+      padding: 12px 0; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .daily-note-item:last-child { border-bottom: none; }
+    .daily-note-date { font-size: 12px; color: var(--muted); min-width: 42px; padding-top: 2px; }
+    .daily-note-content { flex: 1; min-width: 0; font-size: 13px; line-height: 1.5;
+      white-space: pre-wrap; word-break: break-word; color: var(--text); }
+    .daily-note-empty { font-size: 13px; color: var(--muted); font-style: italic; }
+    .daily-note-card { background: var(--card); border-radius: 14px;
+      border: 1px solid var(--border); padding: 4px 14px; margin-bottom: 12px; }
+
     @media (min-width: 600px) {
       .page { max-width: 480px; margin: 0 auto; }
       .topbar { max-width: 480px; margin: 0 auto; }
@@ -685,19 +698,44 @@
 
 <!-- 畫面四：交易明細 -->
 <div class="page" id="tradesPage">
-  <div class="card" style="padding:14px 18px;margin-bottom:12px">
-    <div class="form-group" style="margin-bottom:0">
-      <label class="form-label">選擇月份</label>
-      <div class="date-input-wrap">
-        <span class="date-cal-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        </span>
-        <input class="form-input" type="month" id="tradesMonth" oninput="renderTradesPage()" />
+  <div class="seg-ctrl">
+    <button class="seg-btn active" id="tabTradesList" onclick="switchTradesTab('list')">交易明細</button>
+    <button class="seg-btn" id="tabDailyNotes" onclick="switchTradesTab('notes')">每日心得</button>
+  </div>
+
+  <!-- 交易明細 tab -->
+  <div id="tradesListSection">
+    <div class="card" style="padding:14px 18px;margin-bottom:12px">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">選擇月份</label>
+        <div class="date-input-wrap">
+          <span class="date-cal-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </span>
+          <input class="form-input" type="month" id="tradesMonth" oninput="renderTradesPage()" />
+        </div>
       </div>
     </div>
+    <div class="card" id="tradesDetailCard">
+      <div id="tradesDetailList"><div style="text-align:center;color:var(--muted);padding:24px 0">尚無交易記錄</div></div>
+    </div>
   </div>
-  <div class="card" id="tradesDetailCard">
-    <div id="tradesDetailList"><div style="text-align:center;color:var(--muted);padding:24px 0">尚無交易記錄</div></div>
+
+  <!-- 每日心得 tab -->
+  <div id="dailyNotesSection" style="display:none">
+    <div class="card" style="padding:14px 18px;margin-bottom:12px">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">選擇月份</label>
+        <div class="date-input-wrap">
+          <span class="date-cal-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </span>
+          <input class="form-input" type="month" id="notesMonth" oninput="renderDailyNotesSection()" />
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-bottom:12px" onclick="openDailyNoteEditor('')">＋ 新增今日心得</button>
+    <div id="dailyNotesList"><div style="text-align:center;color:var(--muted);padding:24px 0">本月尚無心得記錄</div></div>
   </div>
 </div>
 
@@ -728,6 +766,8 @@ const COMM_RATE = 0.0004;
 
 // ── STATE ───────────────────────────────────────────────────────
 let allTrades          = [];
+let allDailyNotes      = [];
+let tradesTab          = 'list';
 let editDir            = '空';
 let currentDir         = '空';
 let aiPanelOpen        = true;
@@ -738,7 +778,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initDateInputs();
   document.getElementById('tradeDate').value = todayStr();
   const now=new Date();
-  document.getElementById('analyticsMonth').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  document.getElementById('analyticsMonth').value=ym;
+  document.getElementById('notesMonth').value=ym;
   setDir('空');
   loadData();
 });
@@ -841,9 +883,14 @@ function showAdd(){ _setPage('addPage','addTopbar','navAdd'); }
 function showAnalytics(){ _setPage('analyticsPage','analyticsTopbar','navAnalytics'); renderAnalytics(); }
 function showTrades(){
   _setPage('tradesPage','tradesTopbar','navTrades');
+  const n=new Date();
+  const ym=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
   const m=document.getElementById('tradesMonth');
-  if(!m.value){ const n=new Date(); m.value=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`; }
+  if(!m.value) m.value=ym;
+  const nm=document.getElementById('notesMonth');
+  if(!nm.value) nm.value=ym;
   renderTradesPage();
+  renderDailyNotesSection();
 }
 function renderTradesPage(){
   const ym=document.getElementById('tradesMonth').value;
@@ -878,13 +925,87 @@ function renderTradesPage(){
   }).join('');
 }
 
+// ── TRADES TAB ──────────────────────────────────────────────────
+function switchTradesTab(tab){
+  tradesTab=tab;
+  document.getElementById('tradesListSection').style.display=tab==='list'?'':'none';
+  document.getElementById('dailyNotesSection').style.display=tab==='notes'?'':'none';
+  document.getElementById('tabTradesList').classList.toggle('active',tab==='list');
+  document.getElementById('tabDailyNotes').classList.toggle('active',tab==='notes');
+}
+
+// ── DAILY NOTES ─────────────────────────────────────────────────
+function renderDailyNotesSection(){
+  const ym=document.getElementById('notesMonth').value; // YYYY-MM
+  const list=document.getElementById('dailyNotesList');
+  if(!ym){list.innerHTML='<div style="text-align:center;color:var(--muted);padding:24px 0">請選擇月份</div>';return;}
+  const ymSlash=ym.replace('-','/');
+  const notes=allDailyNotes
+    .filter(n=>n.date.startsWith(ymSlash))
+    .sort((a,b)=>b.date.localeCompare(a.date));
+  if(!notes.length){
+    list.innerHTML='<div style="text-align:center;color:var(--muted);padding:24px 0">本月尚無心得記錄</div>';
+    return;
+  }
+  list.innerHTML='<div class="daily-note-card">'+notes.map(n=>{
+    const mmdd=n.date.substring(5).replace('/','/');
+    const safe=n.note.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<div class="daily-note-item">
+      <div class="daily-note-date">${mmdd}</div>
+      <div class="daily-note-content">${safe||'<span class="daily-note-empty">尚無內容</span>'}</div>
+      <button class="trade-edit-btn" onclick="openDailyNoteEditor('${n.date}')" title="編輯">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+    </div>`;
+  }).join('')+'</div>';
+}
+
+function openDailyNoteEditor(date){
+  const d=date||todayStr();
+  // Convert YYYY/MM/DD → YYYY-MM-DD for date input
+  document.getElementById('dailyNoteDate').value=d.replace(/\//g,'-');
+  const existing=allDailyNotes.find(n=>n.date===d.replace(/-/g,'/'));
+  document.getElementById('dailyNoteText').value=existing?existing.note:'';
+  document.getElementById('dailyNoteModal').classList.add('active');
+}
+
+function closeDailyNoteModal(){
+  document.getElementById('dailyNoteModal').classList.remove('active');
+}
+
+async function submitDailyNote(){
+  const dateInput=document.getElementById('dailyNoteDate').value; // YYYY-MM-DD
+  const note=document.getElementById('dailyNoteText').value.trim();
+  if(!dateInput){showToast('⚠️ 請選擇日期');return;}
+  const dateKey=dateInput.replace(/-/g,'/'); // YYYY/MM/DD
+  showLoading(true);
+  try{
+    const res=await gasPost({action:'saveDailyNote',date:dateKey,note});
+    if(res.status==='ok'){
+      const idx=allDailyNotes.findIndex(n=>n.date===dateKey);
+      if(idx>=0) allDailyNotes[idx].note=note;
+      else allDailyNotes.push({date:dateKey,note,updatedAt:''});
+      closeDailyNoteModal();
+      renderDailyNotesSection();
+      showToast('心得已儲存');
+    } else {
+      showToast('⚠️ 儲存失敗：'+res.message);
+    }
+  }catch(e){ showToast('⚠️ 無法連線 GAS'); console.error(e); }
+  finally{ showLoading(false); }
+}
+
 // ── DATA ────────────────────────────────────────────────────────
 async function loadData(){
   showLoading(true);
   try{
-    const res=await gasPost({action:'getData'});
-    if(res.status==='ok'){ allTrades=res.trades||[]; renderDashboard(); }
+    const [tradesRes, notesRes]=await Promise.all([
+      gasPost({action:'getData'}),
+      gasPost({action:'getDailyNotes'})
+    ]);
+    if(tradesRes.status==='ok'){ allTrades=tradesRes.trades||[]; renderDashboard(); }
     else showToast('⚠️ 資料載入失敗');
+    if(notesRes.status==='ok'){ allDailyNotes=notesRes.notes||[]; }
   }catch(e){ showToast('⚠️ 無法連線 GAS'); console.error(e); }
   finally{ showLoading(false); }
 }
@@ -1523,7 +1644,38 @@ document.getElementById('goalModal').addEventListener('click',function(e){
 document.getElementById('editTradeModal').addEventListener('click',function(e){
   if(e.target===this) closeEditTrade();
 });
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('dailyNoteModal').addEventListener('click',function(e){
+    if(e.target===this) closeDailyNoteModal();
+  });
+});
 </script>
+
+<!-- ===== 每日心得 Modal ===== -->
+<div class="modal-backdrop" id="dailyNoteModal">
+  <div class="modal-box modal-scroll">
+    <div class="modal-title" style="position:relative;">每日交易心得
+      <button onclick="closeDailyNoteModal()" style="position:absolute;top:0;right:0;background:none;border:none;color:#aaa;font-size:1.4rem;line-height:1;cursor:pointer;padding:0 2px;" aria-label="關閉">&times;</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">日期</label>
+      <div class="date-input-wrap">
+        <span class="date-cal-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </span>
+        <input class="form-input" type="date" id="dailyNoteDate" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">心得內容</label>
+      <textarea class="notes-textarea" id="dailyNoteText" rows="7" placeholder="寫下今日的交易心得、策略反思或情緒觀察…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" style="flex:1" onclick="closeDailyNoteModal()">取消</button>
+      <button class="btn btn-primary" style="flex:1" onclick="submitDailyNote()">儲存</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== 編輯交易 Modal ===== -->
 <div class="modal-backdrop" id="editTradeModal">
