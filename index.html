@@ -380,9 +380,24 @@
       flex: 1; min-width: 80px; text-align: center;
       background: var(--bg2); border: 1px solid var(--border);
       border-radius: 10px; padding: 10px 8px;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
     }
     .analytics-stat .val { font-size: 16px; font-weight: 700; white-space: pre-line; }
     .analytics-stat .lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .analytics-stat.has-detail { cursor: pointer; position: relative; }
+    .analytics-stat.has-detail:hover { border-color: var(--accent, #6366f1); }
+    #tradeTooltip {
+      position: fixed; z-index: 9999;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      min-width: 200px; pointer-events: none;
+      font-size: 13px; line-height: 1.6;
+      display: none;
+    }
+    #tradeTooltip .tt-title { font-weight: 700; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+    #tradeTooltip .tt-pnl { font-size: 18px; font-weight: 700; }
+    #tradeTooltip .tt-row { color: var(--muted); font-size: 12px; }
 
     .chart-wrap { position: relative; }
 
@@ -637,8 +652,8 @@
       <div class="card-title">進階統計</div>
       <div class="analytics-summary">
         <div class="analytics-stat"><div class="val" id="msAvgPnl">—</div><div class="lbl">平均損益</div></div>
-        <div class="analytics-stat"><div class="val" id="msMaxWin" style="color:var(--green)">—</div><div class="lbl">最大獲利</div></div>
-        <div class="analytics-stat"><div class="val" id="msMaxLoss" style="color:var(--red)">—</div><div class="lbl">最大虧損</div></div>
+        <div class="analytics-stat has-detail" id="msMaxWinBox"><div class="val" id="msMaxWin" style="color:var(--green)">—</div><div class="lbl">最大獲利</div></div>
+        <div class="analytics-stat has-detail" id="msMaxLossBox"><div class="val" id="msMaxLoss" style="color:var(--red)">—</div><div class="lbl">最大虧損</div></div>
         <div class="analytics-stat"><div class="val" id="msProfitFactor">—</div><div class="lbl">盈虧比</div></div>
       </div>
     </div>
@@ -744,6 +759,63 @@ function fmtNum(n){
   if(n===null||n===undefined||isNaN(n)) return '0';
   return new Intl.NumberFormat('zh-TW').format(n);
 }
+// --- Trade tooltip for max win/loss ---
+(function(){
+  const tt=document.getElementById('tradeTooltip');
+  let hideTimer=null;
+  function showTT(el, trade, title, e){
+    if(!trade) return;
+    clearTimeout(hideTimer);
+    document.getElementById('ttTitle').textContent=title;
+    const sign=trade.pnl>=0?'+':'';
+    const ttPnl=document.getElementById('ttPnl');
+    ttPnl.textContent='NT$ '+sign+fmtNum(trade.pnl);
+    ttPnl.style.color=trade.pnl>0?'var(--green)':'var(--red)';
+    document.getElementById('ttDate').textContent='日期：'+trade.date;
+    document.getElementById('ttStock').textContent='股票：'+trade.stock+(trade.dir?' ('+trade.dir+')':'');
+    const meta=[];
+    if(trade.entry&&trade.exit) meta.push(trade.entry+'→'+trade.exit);
+    if(trade.lots) meta.push(trade.lots+'張');
+    if(trade.notes) meta.push(trade.notes);
+    document.getElementById('ttMeta').textContent=meta.join(' · ');
+    tt.style.display='block';
+    positionTT(e);
+  }
+  function positionTT(e){
+    const x=(e.touches?e.touches[0].clientX:e.clientX)||0;
+    const y=(e.touches?e.touches[0].clientY:e.clientY)||0;
+    const tw=tt.offsetWidth||200, th=tt.offsetHeight||100;
+    let left=x+12, top=y+12;
+    if(left+tw>window.innerWidth-8) left=x-tw-12;
+    if(top+th>window.innerHeight-8) top=y-th-12;
+    tt.style.left=left+'px'; tt.style.top=top+'px';
+  }
+  function hideTT(){ hideTimer=setTimeout(()=>{ tt.style.display='none'; },200); }
+  window._ttBindings=window._ttBindings||{};
+  window.bindTradeTooltip=function(boxId, trade, title){
+    const el=document.getElementById(boxId);
+    if(!el) return;
+    // Remove old listeners
+    if(window._ttBindings[boxId]){
+      const old=window._ttBindings[boxId];
+      el.removeEventListener('mouseenter',old.over);
+      el.removeEventListener('mousemove',old.move);
+      el.removeEventListener('mouseleave',old.out);
+      el.removeEventListener('touchstart',old.touch);
+    }
+    if(!trade){ tt.style.display='none'; return; }
+    const over=e=>showTT(el,trade,title,e);
+    const move=e=>positionTT(e);
+    const out=()=>hideTT();
+    const touch=e=>{ e.preventDefault(); showTT(el,trade,title,e); setTimeout(hideTT,2500); };
+    el.addEventListener('mouseenter',over);
+    el.addEventListener('mousemove',move);
+    el.addEventListener('mouseleave',out);
+    el.addEventListener('touchstart',touch,{passive:false});
+    window._ttBindings[boxId]={over,move,out,touch};
+  };
+})();
+
 let _toastTimer=null;
 function showToast(msg,dur=2800){
   const el=document.getElementById('toast');
@@ -1272,6 +1344,8 @@ function renderMonthlyChart(){
   const avgPnl=cnt>0?Math.round(pnl/cnt):null;
   const maxWin=winTrades.length>0?Math.max(...winTrades.map(t=>t.pnl)):null;
   const maxLoss=lossTrades.length>0?Math.min(...lossTrades.map(t=>t.pnl)):null;
+  const maxWinTrade=maxWin!==null?winTrades.find(t=>t.pnl===maxWin):null;
+  const maxLossTrade=maxLoss!==null?lossTrades.find(t=>t.pnl===maxLoss):null;
   const avgWin=winTrades.length>0?winTrades.reduce((s,t)=>s+t.pnl,0)/winTrades.length:0;
   const avgLossAbs=lossTrades.length>0?Math.abs(lossTrades.reduce((s,t)=>s+t.pnl,0)/lossTrades.length):0;
   const profitFactor=avgLossAbs>0?(avgWin/avgLossAbs).toFixed(2):(avgWin>0?'∞':'—');
@@ -1281,6 +1355,8 @@ function renderMonthlyChart(){
   document.getElementById('msMaxWin').textContent=maxWin!==null?'NT$\n'+fmtNum(maxWin):'—';
   document.getElementById('msMaxLoss').textContent=maxLoss!==null?'NT$\n'+fmtNum(maxLoss):'—';
   document.getElementById('msProfitFactor').textContent=cnt>0?profitFactor:'—';
+  bindTradeTooltip('msMaxWinBox', maxWinTrade, '最大獲利明細');
+  bindTradeTooltip('msMaxLossBox', maxLossTrade, '最大虧損明細');
 
   // Build day buckets
   const [yr,mo]=ym.split('-').map(Number);
@@ -1562,6 +1638,14 @@ document.getElementById('editTradeModal').addEventListener('click',function(e){
     <div id="csvResult" style="display:none; margin-top:16px; padding:16px;
          border-radius:8px; text-align:center; color:#fff;"></div>
   </div>
+</div>
+
+<div id="tradeTooltip">
+  <div class="tt-title" id="ttTitle"></div>
+  <div class="tt-pnl" id="ttPnl"></div>
+  <div class="tt-row" id="ttDate"></div>
+  <div class="tt-row" id="ttStock"></div>
+  <div class="tt-row" id="ttMeta"></div>
 </div>
 
 </body>
